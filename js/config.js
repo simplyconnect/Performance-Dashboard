@@ -8,6 +8,6 @@
  * dashboard's "API Setup" tab instead (saved to that browser only).
  */
 window.DASH_CONFIG = {
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycby0FAUAuMx5eBsMyp-ErGrBhJOpD9nVGsY55JiStJ_en7njfYEkQixaXqk9xVECOR-u/exec',
   DEFAULT_DAYS: 90
 };
