@@ -1,13 +1,14 @@
 /**
  * js/data.js
- * Fetches the live API (or falls back to demo data until one is
- * configured), holds the raw + filtered rows, and computes every
- * number the dashboard displays. Nothing in here touches the DOM.
+ * Fetches the live API, holds the raw + filtered rows, and computes
+ * every number the dashboard displays. Nothing in here touches the
+ * DOM. There is no demo/fake data — until a real API URL is set and
+ * reachable, every table/chart/count is simply empty.
  */
 (function (global) {
   'use strict';
 
-  var RAW = { calls: [], sales: [], meta: {}, generatedAt: null, isDemo: true };
+  var RAW = { calls: [], sales: [], meta: {}, generatedAt: null, connected: false };
   var STATE = {
     period: 'daily',           // daily | weekly | monthly
     dateStart: null,
@@ -32,8 +33,8 @@
   function load(days) {
     var url = getApiUrl();
     if (!url) {
-      buildDemoData();
-      return Promise.resolve({ ok: true, demo: true });
+      RAW.connected = false;
+      return Promise.resolve({ ok: false, connected: false, reason: 'no-url' });
     }
 
     var sep = url.indexOf('?') === -1 ? '?' : '&';
@@ -50,89 +51,14 @@
         RAW.sales = json.sales || [];
         RAW.meta = json.meta || {};
         RAW.generatedAt = json.generatedAt || new Date().toISOString();
-        RAW.isDemo = false;
-        return { ok: true, demo: false };
+        RAW.connected = true;
+        return { ok: true, connected: true };
       })
       .catch(function (err) {
-        console.error('API fetch failed, falling back to demo data:', err);
-        buildDemoData();
-        return { ok: false, demo: true, error: err.message };
+        console.error('API fetch failed:', err);
+        RAW.connected = false;
+        return { ok: false, connected: false, error: err.message };
       });
-  }
-
-  // ───────────────────────── DEMO DATA ─────────────────────────
-  // Only used until a real API URL is configured, so the dashboard
-  // never looks broken on first load. Shaped exactly like the real
-  // API response.
-
-  function buildDemoData() {
-    var teams = ['Team Hassan', 'Team Areeb', 'Team Noor', 'Team Wajahat', 'Team Yousif', 'Team Wireless'];
-    var campaigns = ['Group 44', 'Group 48', 'Group 50', 'Group 55', 'Group 56'];
-    var states = ['TX', 'FL', 'CA', 'GA', 'IN', 'TN', 'NC', 'IL', 'MI', 'AL', 'SC', 'KY'];
-    var providers = ['Xfinity', 'At&t', 'DirectTV', 'T Mobile', 'Frontier'];
-    var services = ['Internet', 'TV', 'Mobility', 'Internet, Phone'];
-    var results = ['Answered', 'Answered', 'Answered', 'Answered', 'Overflow - Time', 'Abandoned', 'Stranded', 'Transferred'];
-    var agentsByTeam = {};
-    teams.forEach(function (t, ti) {
-      agentsByTeam[t] = [];
-      for (var i = 0; i < 4; i++) agentsByTeam[t].push('Agent ' + (ti * 4 + i + 1));
-    });
-
-    var calls = [], sales = [];
-    var today = new Date();
-    for (var d = 29; d >= 0; d--) {
-      var day = new Date(today); day.setDate(day.getDate() - d);
-      var dateStr = day.toISOString().slice(0, 10);
-
-      teams.forEach(function (team) {
-        agentsByTeam[team].forEach(function (agent) {
-          var campaign = campaigns[Math.floor(Math.random() * campaigns.length)];
-          var callsToday = 8 + Math.floor(Math.random() * 20);
-          for (var c = 0; c < callsToday; c++) {
-            var result = results[Math.floor(Math.random() * results.length)];
-            calls.push({
-              'Call Center Name': campaign,
-              Campaign: campaign,
-              Date: dateStr,
-              'Time Frame': (8 + Math.floor(Math.random() * 9)) + '-' + (9 + Math.floor(Math.random() * 9)) + 'CT',
-              'Agent Name': agent,
-              'Call Result': result,
-              'Wait Time': Math.floor(Math.random() * 90),
-              'Talk Time': result === 'Answered' ? 60 + Math.floor(Math.random() * 500) : 0,
-              'Hold Time': Math.floor(Math.random() * 40),
-              'Wrap Up Time': Math.floor(Math.random() * 60),
-              'Disposition Codes': null
-            });
-          }
-          if (Math.random() < 0.35) {
-            var rgus = 1 + Math.floor(Math.random() * 2);
-            var saleHour = 8 + Math.floor(Math.random() * 11); // 8am-6pm shift spread
-            var saleMin = Math.floor(Math.random() * 60);
-            sales.push({
-              Date: dateStr,
-              Timestamp: dateStr + ' ' + String(saleHour).padStart(2, '0') + ':' + String(saleMin).padStart(2, '0') + ':00',
-              Campaign: campaign,
-              'gRPCampaign Number': campaign,
-              'Agent Name': agent,
-              'Closer Name': agent,
-              Team: team,
-              State: states[Math.floor(Math.random() * states.length)],
-              Provider: providers[Math.floor(Math.random() * providers.length)],
-              Services: services[Math.floor(Math.random() * services.length)],
-              "RGU's": rgus,
-              'Installation Type': 'Standard',
-              'Total Points': rgus * (2 + Math.floor(Math.random() * 4))
-            });
-          }
-        });
-      });
-    }
-
-    RAW.calls = calls;
-    RAW.sales = sales;
-    RAW.meta = { callsRows: calls.length, salesRows: sales.length };
-    RAW.generatedAt = new Date().toISOString();
-    RAW.isDemo = true;
   }
 
   // ───────────────────────── FILTER STATE ─────────────────────────
@@ -512,7 +438,8 @@
     getFilterOptions: getFilterOptions,
     getDataRange: getDataRange,
     getRaw: function () { return RAW; },
-    isDemo: function () { return RAW.isDemo; },
+    isConnected: function () { return RAW.connected; },
+    hasData: function () { return RAW.calls.length > 0 || RAW.sales.length > 0; },
     computeKpis: computeKpis,
     computeTrend: computeTrend,
     computeHourly: computeHourly,
