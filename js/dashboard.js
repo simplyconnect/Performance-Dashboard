@@ -114,8 +114,7 @@
       teams: ['Teams', 'Team-level performance comparison'],
       states: ['State Analytics', 'Where sales are landing geographically'],
       campaigns: ['Campaigns', 'Conversion by campaign'],
-      insights: ['Insights', 'Auto-generated takeaways for the current filters'],
-      api: ['API Setup', 'Connect the dashboard to your Google Sheet']
+      insights: ['Insights', 'Auto-generated takeaways for the current filters']
     };
     return map[tab] || ['Dashboard', ''];
   }
@@ -489,61 +488,14 @@
     C.doughnut('chartInstall', Object.keys(mixes.installType), Object.values(mixes.installType));
   }
 
-  // ───────────────────────── RENDER: API SETUP ─────────────────────────
-
-  function renderApiSetup() {
-    var url = D.getApiUrl();
-    var range = D.getDataRange();
-    var raw = D.getRaw();
-
-    var html = '<div class="api-setup">' +
-      '<div class="api-card">' +
-      '<h3>Connection</h3>' +
-      '<p class="api-help">Paste the Apps Script Web App URL you got when you deployed <code>apps-script/Code.gs</code> (Deploy → New deployment → Web app → Execute as Me → Access: Anyone).</p>' +
-      '<div class="api-row">' +
-      '<input type="text" id="apiUrlInput" class="api-input" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="' + (url || '') + '" />' +
-      '<select id="apiDaysSelect" class="slicer-select">' +
-      [30, 60, 90, 180, 365].map(function (d) { return '<option value="' + d + '"' + (d === 90 ? ' selected' : '') + '>' + d + ' days of history</option>'; }).join('') +
-      '</select>' +
-      '<button class="btn-primary" id="apiSaveBtn">Save & Connect</button>' +
-      '</div>' +
-      '<p class="api-status">Status: <strong>' + (raw.isDemo ? 'Demo data' : 'Live data') + '</strong>' +
-      (range ? ' · Loaded rows span ' + range.start + ' → ' + range.end : '') + '</p>' +
-      '</div>' +
-      '<div class="api-card">' +
-      '<h3>Apps Script code</h3>' +
-      '<p class="api-help">The backend script that turns your Google Sheet into this JSON API. Paste it into Extensions → Apps Script in your Sheet.</p>' +
-      '<button class="btn-secondary" id="viewGasBtn">View the Apps Script code</button>' +
-      '</div>' +
-      '</div>';
-
-    document.getElementById('contentArea').innerHTML = html;
-
-    document.getElementById('apiSaveBtn').addEventListener('click', function () {
-      var val = document.getElementById('apiUrlInput').value.trim();
-      D.setApiUrl(val);
-      showToast(val ? 'Saved — connecting…' : 'Cleared — showing demo data.');
-      refreshAll();
-    });
-
-    document.getElementById('viewGasBtn').addEventListener('click', openGasModal);
-  }
-
-  function openGasModal() {
-    var modal = document.getElementById('gasModal');
-    var block = document.getElementById('gasCodeBlock');
-    block.textContent = 'Loading…';
-    modal.style.display = 'flex';
-    fetch('apps-script/Code.gs').then(function (r) { return r.text(); }).then(function (t) {
-      block.textContent = t;
-    }).catch(function () {
-      block.textContent = 'Could not load apps-script/Code.gs — open it directly from the project files.';
-    });
-  }
-
   // ───────────────────────── TAB SWITCHING ─────────────────────────
 
   function render() {
+    if (!D.hasData()) {
+      renderNotConnected(appState.lastResult && appState.lastResult.error ? 'error' : 'no-url');
+      return;
+    }
+    document.querySelector('.slicer-bar').style.display = '';
     var calls = D.getFilteredCalls();
     var sales = D.getFilteredSales();
     switch (appState.tab) {
@@ -553,7 +505,6 @@
       case 'states': renderStates(calls, sales); break;
       case 'campaigns': renderCampaigns(calls, sales); break;
       case 'insights': renderInsights(calls, sales); break;
-      case 'api': renderApiSetup(); break;
     }
   }
 
@@ -565,7 +516,6 @@
     var meta = pageMeta(tab);
     document.getElementById('pageTitle').textContent = meta[0];
     document.querySelector('.page-sub').textContent = meta[1];
-    document.querySelector('.slicer-bar').style.display = tab === 'api' ? 'none' : '';
     render();
   }
 
@@ -702,12 +652,12 @@
   // ───────────────────────── TOAST / STATUS ─────────────────────────
 
   var toastTimer;
-  function showToast(msg) {
+  function showToast(msg, duration) {
     var el = document.getElementById('toast');
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, duration || 3000);
   }
 
   function updateStatusPill(result) {
@@ -716,16 +666,44 @@
     if (result && result.error) {
       dot.className = 'status-dot error';
       text.textContent = 'Connection failed';
-    } else if (D.isDemo()) {
-      dot.className = 'status-dot demo';
-      text.textContent = 'Demo data';
-    } else {
+    } else if (result && result.reason === 'no-url') {
+      dot.className = 'status-dot none';
+      text.textContent = 'Not connected';
+    } else if (D.isConnected()) {
       dot.className = 'status-dot live';
       text.textContent = 'Live data';
+    } else {
+      dot.className = 'status-dot none';
+      text.textContent = 'Not connected';
     }
     var range = D.getDataRange();
     var rangeEl = document.getElementById('dataRangeText');
     rangeEl.textContent = range ? (range.start + ' → ' + range.end) : '—';
+  }
+
+  // ───────────────────────── RENDER: NOT CONNECTED ─────────────────────────
+
+  function renderNotConnected(reason) {
+    document.querySelector('.slicer-bar').style.display = 'none';
+    var isError = reason === 'error';
+    var html = '<div class="empty-state">' +
+      '<div class="empty-state-icon">' + (isError ? '⚠️' : '🔌') + '</div>' +
+      '<h2>' + (isError ? 'Could not reach your API' : 'No data source connected') + '</h2>' +
+      '<p>' + (isError ?
+        'The Apps Script URL is set, but the last request failed. Check the toast message above for the exact error, and see §12 Troubleshooting in the README.' :
+        'This dashboard has no demo/fake data — connect your Google Sheet to see real numbers.') + '</p>' +
+      '<ol class="empty-state-steps">' +
+      '<li>Deploy <code>apps-script/Code.gs</code> in your Sheet as a Web App (Extensions → Apps Script → Deploy → New deployment → Web app → Execute as Me → Access: Anyone).</li>' +
+      '<li>Copy the deployment URL (it ends in <code>/exec</code>).</li>' +
+      '<li>Open <code>js/config.js</code> and set <code>API_URL</code> to that URL, then reload this page.</li>' +
+      '</ol>' +
+      '<button class="btn-primary" id="emptyStateRetry">Retry connection</button>' +
+      '</div>';
+    document.getElementById('contentArea').innerHTML = html;
+    document.getElementById('emptyStateRetry').addEventListener('click', function () {
+      showToast('Retrying…');
+      refreshAll();
+    });
   }
 
   // ───────────────────────── INIT / REFRESH ─────────────────────────
@@ -733,9 +711,13 @@
   function refreshAll() {
     var days = (window.DASH_CONFIG && window.DASH_CONFIG.DEFAULT_DAYS) || 90;
     return D.load(days).then(function (result) {
+      appState.lastResult = result;
       refreshFilterOptions();
       updateStatusPill(result);
       render();
+      if (result && result.error) {
+        showToast('Could not reach the API. (' + result.error + ')', 6000);
+      }
       return result;
     });
   }
@@ -755,13 +737,6 @@
     document.getElementById('refreshBtn').addEventListener('click', function () {
       showToast('Refreshing…');
       refreshAll();
-    });
-
-    document.getElementById('gasModalClose').addEventListener('click', function () {
-      document.getElementById('gasModal').style.display = 'none';
-    });
-    document.getElementById('gasModal').addEventListener('click', function (e) {
-      if (e.target.id === 'gasModal') document.getElementById('gasModal').style.display = 'none';
     });
 
     wireFilterBar();
