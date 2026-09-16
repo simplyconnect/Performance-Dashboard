@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simply Connect · Agent Performance Dashboard</title>
+  <meta name="description" content="Live agent performance dashboard for Simply Connect — calls, sales, RGUs and incentive points, pulled straight from Google Sheets." />
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Chart.js is deferred so it downloads in parallel with the rest of
+       the page instead of blocking parsing — it still runs before
+       js/charts.js and js/dashboard.js because deferred scripts execute
+       in source order, right before DOMContentLoaded. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════
+     LAYOUT SHELL
+════════════════════════════════════════════════ -->
+<div class="layout">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <img src="assets/logo-mark.png" alt="Simply Connect" class="sidebar-logo-icon sidebar-logo-img" onerror="this.style.display='none'" />
+      <span class="sidebar-logo-text">Simply Connect</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="overview">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Overview</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="agents">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Agent Rankings</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="teams">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <span>Teams</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="states">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span>State Analytics</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="campaigns">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Campaigns</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="insights">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>Insights</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="api">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>API Setup</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar">SC</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">Admin</div>
+          <div class="sidebar-user-role">Dashboard Manager</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <div class="main-area">
+
+    <!-- TOP HEADER -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="page-title-area">
+          <h1 class="page-title" id="pageTitle">Overview</h1>
+          <p class="page-sub">Sales performance summary</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="data-range" id="dataRange" title="The full span of rows currently loaded from your Google Sheet">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span id="dataRangeText">—</span>
+        </div>
+        <div class="data-status" id="dataStatus">
+          <span class="status-dot live"></span>
+          <span class="status-text">Live data</span>
+        </div>
+        <button class="btn-icon" id="refreshBtn" title="Refresh data">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- SLICER BAR -->
+    <div class="slicer-bar">
+      <!-- Period tabs -->
+      <div class="period-tabs">
+        <button class="period-tab active" data-period="daily">Daily</button>
+        <button class="period-tab" data-period="weekly">Weekly</button>
+        <button class="period-tab" data-period="monthly">Monthly</button>
+      </div>
+
+      <div class="slicer-divider"></div>
+
+      <!-- Date range -->
+      <div class="slicer-group">
+        <label class="slicer-label">Date</label>
+        <div class="date-range-wrap">
+          <input type="date" id="dateStart" class="slicer-date" />
+          <span class="date-sep">→</span>
+          <input type="date" id="dateEnd" class="slicer-date" />
+        </div>
+      </div>
+
+      <!-- Team -->
+      <div class="slicer-group">
+        <label class="slicer-label">Team</label>
+        <select class="slicer-select" id="filterTeam">
+          <option value="">All teams</option>
+          <option>Team Hassan</option>
+          <option>Team Areeb</option>
+          <option>Team Noor</option>
+          <option>Team Wajahat</option>
+          <option>Team Yousif</option>
+          <option>Team Wireless</option>
+        </select>
+      </div>
+
+      <!-- Campaign -->
+      <div class="slicer-group">
+        <label class="slicer-label">Campaign</label>
+        <select class="slicer-select" id="filterCampaign">
+          <option value="">All campaigns</option>
+          <option>Group 44</option>
+          <option>Group 48</option>
+          <option>Group 50</option>
+          <option>Group 55</option>
+          <option>Group 56</option>
+        </select>
+      </div>
+
+      <!-- State -->
+      <div class="slicer-group">
+        <label class="slicer-label">State</label>
+        <select class="slicer-select" id="filterState">
+          <option value="">All states</option>
+          <option>TX</option><option>FL</option><option>CA</option>
+          <option>GA</option><option>IN</option><option>TN</option>
+          <option>NC</option><option>IL</option><option>MI</option>
+          <option>AL</option><option>SC</option><option>KY</option>
+        </select>
+      </div>
+
+      <!-- Agent -->
+      <div class="slicer-group">
+        <label class="slicer-label">Agent</label>
+        <select class="slicer-select" id="filterAgent">
+          <option value="">All agents</option>
+        </select>
+      </div>
+
+      <!-- Call Result -->
+      <div class="slicer-group">
+        <label class="slicer-label">Call Result</label>
+        <select class="slicer-select" id="filterCallResult">
+          <option value="">All results</option>
+          <option>Answered</option>
+          <option>Overflow - Time</option>
+          <option>Stranded - Unavailable</option>
+          <option>Abandoned</option>
+          <option>Stranded</option>
+          <option>Transferred</option>
+          <option>Escaped</option>
+        </select>
+      </div>
+
+      <!-- Search -->
+      <div class="slicer-group slicer-search">
+        <label class="slicer-label">Search</label>
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="globalSearch" class="slicer-input" placeholder="Search agent, team, state…" />
+        </div>
+      </div>
+
+      <div class="slicer-actions">
+        <button class="btn-clear" id="clearFilters">Clear filters</button>
+        <button class="btn-export" id="exportCsvBtn">Export CSV</button>
+      </div>
+    </div>
+
+    <!-- PAGE CONTENT -->
+    <main class="content" id="contentArea">
+      <!-- injected by JS -->
+    </main>
+
+  </div><!-- /main-area -->
+</div><!-- /layout -->
+
+<!-- ════ GAS CODE MODAL ════ -->
+<div class="modal-overlay" id="gasModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h3>Google Apps Script — API Code</h3>
+      <button class="modal-close" id="gasModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre class="gas-code" id="gasCodeBlock"></pre>
+    </div>
+    <div class="modal-footer">
+      <strong>Deploy:</strong> Apps Script → Deploy → Web App → Execute as Me → Access: Anyone → Copy the URL → paste it into the <strong>API Setup</strong> tab (or bake it into <code>js/config.js</code> before deploying to Vercel).
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/config.js" defer></script>
+<script src="js/data.js" defer></script>
+<script src="js/charts.js" defer></script>
+<script src="js/dashboard.js" defer></script>
+</body>
+</html>
